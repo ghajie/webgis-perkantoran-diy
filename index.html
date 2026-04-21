@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no" />
+    <title>WebGIS Perkantoran DIY - Mapbox</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+    <link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet" />
+
+    <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.1.1/mapbox-gl-directions.js"></script>
+    <link rel="stylesheet" href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-directions/v4.1.1/mapbox-gl-directions.css" type="text/css" />
+
+    <style>
+        body { font-family: 'Arial', sans-serif; background-color: #f8f9fa; }
+        /* Warna Header disesuaikan dengan warna di Tutorial PDF */
+        .bg-header { background-color: #206b55; color: white; padding: 40px 0; }
+        #map { width: 100%; height: 500px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .legenda { background-color: white; padding: 15px; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); font-size: 14px;}
+        .kotak-warna { display: inline-block; width: 15px; height: 15px; margin-right: 8px; vertical-align: middle; border: 1px solid #ccc;}
+        .mapboxgl-ctrl-directions { max-width: 300px; }
+    </style>
+</head>
+<body>
+
+    <nav class="navbar navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="#!">Sistem Informasi Geografis</a>
+        </div>
+    </nav>
+
+    <header class="bg-header text-center mb-4">
+        <div class="container">
+            <h1 class="fw-bolder">Web Map Perkantoran DIY</h1>
+            <p class="lead mb-0">Informasi Sebaran Bangunan Fasilitas Umum & Perkantoran</p>
+        </div>
+    </header>
+
+    <div class="container mb-5">
+        <div class="row">
+
+            <div class="col-lg-3 mb-4">
+                <div class="card shadow-sm mb-4">
+                    <div class="card-header fw-bold bg-light">Petunjuk Penggunaan</div>
+                    <div class="card-body" style="font-size: 13px;">
+                        <ol class="ps-3 mb-0">
+                            <li class="mb-2">Gunakan tombol <strong>+</strong> dan <strong>-</strong> di sudut kiri untuk melakukan Zoom.</li>
+                            <li class="mb-2">Gunakan kotak di kanan atas untuk mencari rute.</li>
+                            <li>Klik pada blok bangunan berwarna biru di peta untuk melihat detail informasinya.</li>
+                        </ol>
+                    </div>
+                </div>
+                
+                <div class="legenda shadow-sm">
+                    <strong>Legenda:</strong><br><br>
+                    <div><span class="kotak-warna" style="background-color: #2980b9;"></span> Bangunan / Fasilitas</div>
+                </div>
+            </div>
+
+            <div class="col-lg-9">
+                <div class="card shadow-sm p-2">
+                    <div id="map"></div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <footer class="py-4 bg-dark">
+        <div class="container">
+            <p class="m-0 text-center text-white" style="font-size: 14px;">
+                Copyright &copy; MuhammadAjieIrawan - 117220059 2026
+            </p>
+        </div>
+    </footer>
+
+    <script>
+        // 1. MASUKKAN TOKEN MAPBOX KAMU DI SINI
+        mapboxgl.accessToken = 'pk.eyJ1IjoibWFwYm94YWppZSIsImEiOiJjbW5xaGF0eWcwNzMyMnFzZjNzZTNjMnBhIn0.0cxfEC3yFvmAcCVccYMP3A';
+
+        // 2. INISIALISASI PETA
+        const map = new mapboxgl.Map({
+            container: 'map', 
+            style: 'mapbox://styles/mapbox/streets-v12', // Tampilan standar sesuai tutorial
+            center: [110.38452, -7.80409], // Koordinat Jl. Kusumanegara sesuai QGIS-mu
+            zoom: 16
+        });
+
+        // 3. KONTROL ZOOM & RUTE
+        map.addControl(new mapboxgl.NavigationControl(), 'top-left');
+        const directions = new MapboxDirections({
+            accessToken: mapboxgl.accessToken,
+            unit: 'metric',
+            profile: 'mapbox/driving',
+            controls: { instructions: false }
+        });
+        map.addControl(directions, 'top-right');
+
+        // 4. MEMUAT DATA GEOJSON
+        map.on('load', () => {
+
+            const popup = new mapboxgl.Popup({ closeButton: true, closeOnClick: true, offset: 15 });
+
+            // MENGAMBIL DATA BANGUNAN
+            map.addSource('sumber_bangunan', {
+                type: 'geojson',
+                data: "assets/Bangunan.geojson" // Pastikan file berada di dalam folder assets/geojson/
+            });
+
+            // MEWARNAI BANGUNAN
+            map.addLayer({
+                id: 'layer_bangunan',
+                type: 'fill',
+                source: 'sumber_bangunan',
+                paint: {
+                    'fill-color': '#2980b9', // Warna biru 
+                    'fill-opacity': 0.7,
+                    'fill-outline-color': '#1c5980'
+                }
+            });
+
+            // INTERAKSI KLIK (Menggabungkan logika tabel atribut OSM)
+            map.on('click', 'layer_bangunan', (e) => {
+                const properti = e.features[0].properties;
+                
+                // Logika pintar untuk mencari nama bangunan
+                let namaBangunan = properti.name || properti.office || properti.amenity || properti.religion;
+                if (!namaBangunan || namaBangunan === 'NULL') {
+                    namaBangunan = 'Bangunan (Tanpa Nama)';
+                }
+
+                // Logika mencari tinggi
+                let tinggi = properti.height;
+                if (!tinggi || tinggi === 'NULL') {
+                    tinggi = 'Tidak ada data';
+                } else {
+                    tinggi = tinggi + ' m';
+                }
+
+                // Logika ID OSM
+                let osmId = properti.osm_id || '-';
+
+                // Format tampilan Pop-up
+                const kontenPopup = `
+                    <div style="font-size: 13px;">
+                        <strong style="font-size: 15px; color: #206b55;">${namaBangunan}</strong><br>
+                        <hr style="margin: 6px 0;">
+                        <strong>ID OSM:</strong> ${osmId}<br>
+                        <strong>Tinggi:</strong> ${tinggi}
+                    </div>
+                `;
+
+                popup.setLngLat(e.lngLat)
+                     .setHTML(kontenPopup)
+                     .addTo(map);
+            });
+
+            // EFEK KURSOR
+            map.on('mouseenter', 'layer_bangunan', () => { map.getCanvas().style.cursor = 'pointer'; });
+            map.on('mouseleave', 'layer_bangunan', () => { map.getCanvas().style.cursor = ''; });
+
+        });
+    </script>
+</body>
+</html>
